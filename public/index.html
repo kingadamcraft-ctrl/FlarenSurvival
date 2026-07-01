@@ -9,7 +9,7 @@
         canvas { display: block; width: 100vw; height: 100vh; }
         #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; transform: translate(-50%, -50%); pointer-events: none; z-index: 10; }
         #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,0.9); mix-blend-mode: difference; }
-        #crosshair::before { top: 4px; left: -5px; width: 20px; height: 2px; }
+        #crossgit push -u origin mainhair::before { top: 4px; left: -5px; width: 20px; height: 2px; }
         #crosshair::after { top: -5px; left: 4px; width: 2px; height: 20px; }
         #ui-container { position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
         #hotbar { display: flex; background: rgba(10, 16, 26, 0.85); padding: 6px; border-radius: 16px; border: 2px solid rgba(255,255,255,0.15); gap: 6px; pointer-events: auto; }
@@ -55,9 +55,28 @@
         <button class="btn" onclick="toggleInventory()" style="margin-top: 25px; background: #ef4444;">Close [E]</button>
     </div>
 
-    <div id="ui-container">
-        <div id="hotbar"></div>
-    </div>
+    <<</div> <div id="ui-container">
+    <div id="hotbar"></div>
+</div>
+
+<div style="position: fixed; top: 80px; right: 10px; background: rgba(0,0,0,0.6); color: white; padding: 10px; border-radius: 5px; font-family: sans-serif; font-size: 13px; z-index: 10000; pointer-events: auto; text-align: right;">
+    <label>Render Distance: <span id="renderValue">2</span></label><br>
+    <input type="range" id="renderSlider" min="1" max="6" value="2" style="width: 120px; margin-top: 5px; cursor: pointer;">
+</div>
+
+<script>
+    const rSlider = document.getElementById('renderSlider');
+    
+    // Stop the game from taking your mouse when you try to click the settings
+    rSlider.addEventListener('mousedown', (e) => e.stopPropagation());
+    
+    rSlider.addEventListener('input', function(e) {
+        let val = parseInt(e.target.value);
+        document.getElementById('renderValue').innerText = val;
+        RENDER_DISTANCE = val; 
+    });
+</script>
+</script>
 <script src="structures.js"></script>
 <script src="public/startScreen.js"></script>
     <script src="mobs.js"></script> 
@@ -85,7 +104,7 @@
         const CHUNK_SIZE = 16;
         const CHUNK_HEIGHT = 128; 
         const SEA_LEVEL = 32;    
-        const RENDER_DISTANCE = 4;
+        let RENDER_DISTANCE = 2;
         
         const activeChunks = new Map();
         const worldModifications = new Map();
@@ -99,7 +118,7 @@
         let fpsFrames = 0;
         const fpsCounterEl = document.getElementById('fps-counter');
 
-        const SEED_OFFSET_X = Math.random() * 50000 + 12345;
+       const SEED_OFFSET_X = Math.random() * 50000 + 12345;
         const SEED_OFFSET_Y = Math.random() * 50000 + 23456;
         const SEED_OFFSET_Z = Math.random() * 50000 + 34567;
 
@@ -123,40 +142,56 @@
             return h - Math.floor(h);
         }
 
-        // BIOME WEIGHTS: 1. Forest (Most Common) | 2. Cherry Hills (Second) | 3. Steep Mountains (Third) | 4. Plains
+        // MORE FREQUENT CHERRY BIOME SELECTOR
         function getBiomeType(x, z) {
-            let v = (getNoise2D(x, z, 0.003) + 1) * 0.5; 
-            if (v < 0.40) return 'FOREST';
-            if (v < 0.72) return 'CHERRY_HILLS'; 
-            if (v < 0.90) return 'MOUNTAINS';
-            return 'PLAINS';
+            let n = (getNoise2D(x, z, 0.004) + 1) * 0.5;
+            if (n < 0.25) return 'PLAINS';
+            if (n < 0.50) return 'FOREST';
+            if (n < 0.70) return 'MOUNTAINS';
+            return 'CHERRY_HILLS'; // Now takes up 30% of the map instead of 12%!
         }
 
+        // HIGH-PERFORMANCE UNIFIED GENERATOR
         function getNoiseHeight(x, z) {
-            let biome = getBiomeType(x, z);
+            let baseNoise = getNoise2D(x, z, 0.004); 
+            let detailNoise = getNoise2D(x, z, 0.015) * 0.3; 
+            let combined = (baseNoise + detailNoise + 1) * 0.5; 
+
             let baseHeight = SEA_LEVEL + 4;
 
-            if (biome === 'PLAINS') {
-                baseHeight += (getNoise2D(x, z, 0.015) + 0.5) * 4;
-            } else if (biome === 'FOREST') {
-                baseHeight += 4 + (getNoise2D(x, z, 0.01) + 0.5) * 8;
-            } else if (biome === 'CHERRY_HILLS') {
-                // TALL STEEP HILLS FOR CHERRY TREES
-                let hillNoise = Math.abs(getNoise2D(x, z, 0.012));
-                baseHeight += 12 + Math.pow(hillNoise * 2.5, 1.8) * 28;
-            } else if (biome === 'MOUNTAINS') {
-                // EXTREMELY RUGGED STEED MOUNTAINS
-                let mountNoise = Math.abs(getNoise2D(x, z, 0.007) + getNoise2D(x, z, 0.02) * 0.25);
-                baseHeight += 16 + Math.pow(mountNoise * 3.0, 2.2) * 62;
+            if (combined < 0.25) {
+                // Flat Plains
+                baseHeight += combined * 6;
+            } else if (combined < 0.50) {
+                // Gentle Forests
+                baseHeight += 2 + Math.pow((combined - 0.15), 1.5) * 20;
+            } else {
+                // Rolling Mountains & High Cherry Peaks
+                let mountScale = (combined - 0.50) / 0.50; 
+                baseHeight += 12 + Math.pow(mountScale * 2.8, 2.2) * 45;
+                
+                if (mountScale > 0.6) {
+                    baseHeight += Math.pow((mountScale - 0.6) * 3, 3) * 15;
+                }
             }
 
-            // FLUID WATERWAYS: Lakes, Rivers, and Ravines integrated into ALL biomes
-            let riverNoise = Math.abs(getNoise2D(x, z, 0.008));
-            if (riverNoise < 0.05) {
-                let targetFloor = SEA_LEVEL - 6;
-                let t = riverNoise / 0.05;
-                baseHeight = THREE.MathUtils.lerp(targetFloor, baseHeight, Math.pow(t, 0.6));
+            // Fast Waterways & Lakes
+            let waterNoise = getNoise2D(x, z, 0.008);
+            if (waterNoise < -0.2) {
+                let depth = Math.abs(waterNoise + 0.2) * 18;
+                baseHeight -= depth;
+                if (combined < 0.50) {
+                    baseHeight = THREE.MathUtils.lerp(baseHeight, SEA_LEVEL - 3, 0.5);
+                }
             }
+
+            // Rivers
+            let riverNoise = Math.abs(getNoise2D(x, z, 0.012));
+            if (riverNoise < 0.03) {
+                let t = riverNoise / 0.03;
+                baseHeight = THREE.MathUtils.lerp(SEA_LEVEL - 4, baseHeight, Math.pow(t, 0.8));
+            }
+
             return baseHeight;
         }
         function generateProceduralTexture(type, baseColorHex) {
